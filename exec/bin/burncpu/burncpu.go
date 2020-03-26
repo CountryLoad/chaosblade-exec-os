@@ -49,7 +49,7 @@ func main() {
 	flag.BoolVar(&burnCpuNohup, "nohup", false, "nohup to run burn cpu")
 	flag.IntVar(&cpuCount, "cpu-count", runtime.NumCPU(), "number of cpus")
 	flag.IntVar(&cpuPercent, "cpu-percent", 100, "percent of burn-cpu")
-	flag.StringVar(&cpuProcessor, "cpu-processor", "0", "only used for identifying process of cpu burn")
+	flag.StringVar(&cpuProcessor, "cpu-processor", "", "only used for identifying process of cpu burn")
 	bin.ParseFlagAndInitLog()
 
 	if cpuCount <= 0 || cpuCount > runtime.NumCPU() {
@@ -78,7 +78,17 @@ func burnCpu() {
 	var curCpuPercent float64
 	var err error
 
-	totalCpuPercent, err = cpu.Percent(time.Second, false)
+	percpu := false
+	cpuIndex := 0
+	if cpuProcessor != "" {
+		percpu = true
+		cpuIndex, err = strconv.Atoi(cpuProcessor)
+		if err != nil {
+			bin.PrintErrAndExit(err.Error())
+		}
+	}
+
+	totalCpuPercent, err = cpu.Percent(time.Second, percpu)
 	if err != nil {
 		bin.PrintErrAndExit(err.Error())
 	}
@@ -93,13 +103,13 @@ func burnCpu() {
 		bin.PrintErrAndExit(err.Error())
 	}
 
-	otherCpuPercent := (100.0 - (totalCpuPercent[0] - curCpuPercent)) / 100.0
+	otherCpuPercent := (100.0 - (totalCpuPercent[cpuIndex] - curCpuPercent)) / 100.0
 	go func() {
 		t := time.NewTicker(3 * time.Second)
 		for {
 			select {
 			case <-t.C:
-				totalCpuPercent, err = cpu.Percent(time.Second, false)
+				totalCpuPercent, err = cpu.Percent(time.Second, percpu)
 				if err != nil {
 					bin.PrintErrAndExit(err.Error())
 				}
@@ -109,7 +119,7 @@ func burnCpu() {
 					bin.PrintErrAndExit(err.Error())
 				}
 
-				otherCpuPercent = (100.0 - (totalCpuPercent[0] - curCpuPercent)) / 100.0
+				otherCpuPercent = (100.0 - (totalCpuPercent[cpuIndex] - curCpuPercent)) / 100.0
 			}
 		}
 	}()
@@ -123,7 +133,7 @@ func burnCpu() {
 			for i := 0; ; i = (i + 1) % 1000 {
 				startTime := time.Now().UnixNano()
 				if i == 0 {
-					dx = (float64(cpuPercent) - totalCpuPercent[0]) / otherCpuPercent
+					dx = (float64(cpuPercent) - totalCpuPercent[cpuIndex]) / otherCpuPercent
 					busy = busy + int64(dx*100000)
 					if busy < 0 {
 						busy = 0
